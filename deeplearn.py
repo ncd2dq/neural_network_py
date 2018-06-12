@@ -21,6 +21,7 @@ class NeuralNetwork(object):
                     *
 
         '''
+        self._reluDeriv = np.vectorize(self._relu_Deriv_nonvec)
 
         if connections == None:
             self._testSize(size)
@@ -135,13 +136,23 @@ class NeuralNetwork(object):
     def softMax(self, layer):
         '''Forces a neuron to only fire the most confident output'''
         for row in layer:
-            largest = 0
-            for col in row:
+            largest = 0.0
+            index_max = 0
+
+            for index, col in enumerate(row):
                 if col > largest:
                     largest = col
-            for index, col in enumerate(row):
-                if col != largest:
+                    index_max = index
+                    print(index_max)
+
+            print("overall largest {}".format(str(largest)))
+            for index in range(len(row)):
+                if index == index_max:
+                    row[index] = 1
+                else:
                     row[index] = 0
+
+        return layer
 
 
     def sigmoid(self, z, deriv=False):
@@ -154,6 +165,13 @@ class NeuralNetwork(object):
             return output * (1 - output)
 
 
+    def _relu_Deriv_nonvec(self, z):
+        if z > 0:
+            return 1
+        else:
+            return 0
+
+
     def relu(self, z, deriv=False):
         '''Forces 0 or 1 for outside of domain(-1, 1), else y = x + 1'''
         output = np.maximum(z, 0, z)
@@ -161,15 +179,12 @@ class NeuralNetwork(object):
         if not deriv:
             return output
         else: # this is not going to work because you can't do a comparison operator on an entire nump array, need to look up how to do this element wise
-            if z > 0: #FIX THIS ERROR LATER
-                return 1
-            else:
-                return 0
+            return self._reluDeriv(z)
 
 
-    def softplus(self, z, deriv=False):
+    def softPlus(self, z, deriv=False):
         '''A smooth approximation of the relu activation function'''
-        output = log(1 + np.exp(z))
+        output = np.log(1 + np.exp(z))
 
         if not deriv:
             return output
@@ -223,8 +238,11 @@ class NeuralNetwork(object):
                 self._layer_deltas.append(delta)
 
 
-    def updateWeights(self, inpts, LR):
+    def updateWeights(self, inpts, LR, LR_Decay):
         '''Uses the delta and layer output matrix to update the appropriate weights'''
+        if LR_Decay != None:
+            LR = LR_Decay(LR)
+
         for index, connection in enumerate(self.connections):
             if index == 0:
                 withBias = self._addBias(inpts)
@@ -234,21 +252,25 @@ class NeuralNetwork(object):
                 connection += np.dot(withBias.T, self._layer_deltas[(index + 1) * - 1]) * LR
 
 
-    def train(self, inpts, labels, epocs=1000, LR=0.05, activation=None):
+    def train(self, inpts, labels, epocs=1000, LR=0.05, LR_Decay=None, activation=None, finalLayerActivation=None):
         for _ in range(epocs):
             self.forwardPass(inpts, activation)
             self.backwardPass(labels, activation)
-            self.updateWeights(inpts, LR)
+            self.updateWeights(inpts, LR, LR_Decay)
 
-        print(self._layer_out[-1])
+        if finalLayerActivation == None:
+            print("Final Output:\n", self._layer_out[-1])
+        else:
+            out = self.finalLayerActivation(self._layer_out[-1])
+            print("Final Output:\n", out)
 
 
 
 if __name__ == '__main__':
     brain = NeuralNetwork(size=(3, 2, 3, 1))
-    inp = np.array([[1, 1, 1], [0, 1, 1], [0, 0, 1]])
-    labels = np.array([[1], [0], [0]])
+    inp = np.array([[1, 1, 1], [0, 1, 1], [0, 0, 1], [0, 0, 0]])
+    labels = np.array([[1], [0], [0], [0]])
 
-    brain.train(inp, labels, epocs=10000)
+    brain.train(inp, labels, epocs=100000, activation=brain.relu)
 
     sleep(10)
