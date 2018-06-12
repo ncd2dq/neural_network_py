@@ -180,7 +180,7 @@ class NeuralNetwork(object):
     # Training Logic: Forward Propagation
     #
 
-    def forwardPass(self, inpts, activation=None):
+    def forwardPass(self, inpts, activation):
         '''One forward propagation through the network'''
         if activation == None:
             activation = self._default_activation
@@ -215,24 +215,40 @@ class NeuralNetwork(object):
                 self._layer_deltas.append(delta)
 
             else:
+                error = np.dot(self._layer_deltas[-1], self.connections[index * -1].T) 
+                # Since the connections expect an additional feature in the inputs (additional column) as a bias, they have an additional row
+                # When you transpose the synapse here (above), it will lead to the error having an extra col compared to the activation(output)
+                error = error[:,:-1] #every row, all but last column (pertaining to the bias)
+                delta = error * activation(output, deriv=True)
+                self._layer_deltas.append(delta)
+
+
+    def updateWeights(self, inpts, LR):
+        '''Uses the delta and layer output matrix to update the appropriate weights'''
+        for index, connection in enumerate(self.connections):
+            if index == 0:
+                withBias = self._addBias(inpts)
+                connection += np.dot(withBias.T, self._layer_deltas[(index + 1) * - 1]) * LR #loop over the deltas in reverse
+            else:
+                withBias = self._addBias(self._layer_out[index - 1])
+                connection += np.dot(withBias.T, self._layer_deltas[(index + 1) * - 1]) * LR
+
+
+    def train(self, inpts, labels, epocs=1000, LR=0.05, activation=None):
+        for _ in range(epocs):
+            self.forwardPass(inpts, activation)
+            self.backwardPass(labels, activation)
+            self.updateWeights(inpts, LR)
+
+        print(self._layer_out[-1])
+
 
 
 if __name__ == '__main__':
-    print('Testing Network Setups')
-    size = [2, 3, 4, 5]
-    test_network = NeuralNetwork(size)
-    print(test_network)
+    brain = NeuralNetwork(size=(3, 2, 3, 1))
+    inp = np.array([[1, 1, 1], [0, 1, 1], [0, 0, 1]])
+    labels = np.array([[1], [0], [0]])
 
-    test_connections = [ np.array([[1, 1, 1], [1, 2, 3.4]]), np.array([[1, 1, 1, 2], [1, 2, 3.4, 5], [1, 2, 3.4, 5], [1, 2, 3.4, 5]]), np.array([[1, 1], [1, 2], [1, 2], [1, 2], [1, 2]]) ]
-    test_network2 = NeuralNetwork(connections=test_connections)
-    print(test_network2)
-    print(repr(test_network2))
+    brain.train(inp, labels, epocs=10000)
 
-    print('_____________')
-    print('Testing Forward Pass')
-    test_network3 = NeuralNetwork(size)
-    test_input = np.array([[1, 1], [2, 1], [5, 3]])
-    test_network3.forwardPass(test_input, activation=test_network3.relu)
-    print(test_network3._layer_out[-1])
-
-    sleep(5)
+    sleep(10)
